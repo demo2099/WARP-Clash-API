@@ -24,11 +24,20 @@ def getProxy():
     Get proxy from proxy pool
     :return: proxy got from proxy pool
     """
-    ret = requests.get(PROXY_POOL_URL).json()
-    proxy = {}
-    if ret.get('proxy'):
-        if ret['https']:
-            proxy = {"https": {ret['proxy']}}
-        else:
-            proxy = {"http": {ret['proxy']}}
-    return proxy
+    if not PROXY_POOL_URL:
+        return {}
+
+    try:
+        ret = requests.get(PROXY_POOL_URL, timeout=15).json()
+        raw_proxy = ret.get('proxy')
+        if not raw_proxy:
+            return {}
+
+        proxy_url = raw_proxy if "://" in raw_proxy else f"http://{raw_proxy}"
+        # Keep both keys for requests compatibility.
+        return {
+            "http": proxy_url,
+            "https": proxy_url
+        }
+    except Exception:
+        return {}

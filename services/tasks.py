@@ -25,6 +25,7 @@ from utils.entrypoints import optimizeEntrypoints
 from utils.wireguard import generateWireguardKeys
 from services.cloudflare import getAccount
 from utils.proxy import getProxy
+from config import USE_PROXY_POOL, ALLOW_DIRECT_REGISTER_FALLBACK
 
 
 def doAddDataTaskOnce(account: Account = None, logger=logging.Logger(__name__)) -> bool:
@@ -43,7 +44,11 @@ def doAddDataTaskOnce(account: Account = None, logger=logging.Logger(__name__)) 
 
     try:
         privkey, pubkey = generateWireguardKeys()
-        register(pubkey, privkey, referrer=account.account_id, proxy=getProxy())
+        proxy = getProxy() if USE_PROXY_POOL else {}
+        if USE_PROXY_POOL and not proxy and not ALLOW_DIRECT_REGISTER_FALLBACK:
+            logger.warning("Proxy pool enabled but no proxy is available. Skip this round.")
+            return False
+        register(pubkey, privkey, referrer=account.account_id, proxy=proxy)
     except Exception as e:
         logger.warning(f"Failed to get account from Cloudflare.")
         logger.warning(f"{e}")

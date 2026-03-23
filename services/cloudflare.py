@@ -16,24 +16,39 @@ along with this program; if not, see <https://www.gnu.org/licenses>.
 """
 import datetime
 import random
+import time
+from urllib.parse import urlparse
 
 import requests
 import faker
+from requests import RequestException
 from models import Account
+from config import (
+    CF_API_URL,
+    CF_API_VERSION,
+    CF_CLIENT_VERSION,
+    CF_USER_AGENT,
+    REQUEST_TIMEOUT,
+    REGISTER_MAX_RETRIES,
+    REGISTER_RETRY_SLEEP,
+    IGNORE_ENV_PROXY,
+)
 
-API_URL = "https://api.cloudflareclient.com"
-API_VERSION = "v0i2308311933"
+API_URL = CF_API_URL
+API_VERSION = CF_API_VERSION
 DEFAULT_HEADERS = {
-    "User-Agent": "1.1.1.1/6.23",
-    "CF-Client-Version": "i-6.23-2308311933.1",
+    "User-Agent": CF_USER_AGENT,
+    "CF-Client-Version": CF_CLIENT_VERSION,
     'Content-Type': 'application/json; charset=UTF-8',
-    'Host': 'api.cloudflareclient.com',
+    'Host': urlparse(CF_API_URL).netloc or 'api.cloudflareclient.com',
     'Connection': 'Keep-Alive',
     'Accept-Encoding': 'gzip',
 }
 
 SESSION = requests.Session()
 SESSION.headers.update(DEFAULT_HEADERS)
+if IGNORE_ENV_PROXY:
+    SESSION.trust_env = False
 FAKE = faker.Faker()
 LOCALE_LIST = ["en_US", "zh_CN", "zh_TW", "ja_JP", "ko_KR", "fr_FR", "de_DE", "es_ES"]
 DEVICE_MODEL_LIST = ["iPhone16,2", "iPhone16,1", "iPhone14,2", "iPhone14,1", "iPhone13,4", "iPhone13,3", "iPhone13,2",
@@ -106,8 +121,24 @@ def register(public_key, private_key, device_model=None, referrer="",
     if referrer:
         data["referrer"] = referrer
 
-    # Send the request
-    response = SESSION.post(f"{API_URL}/{API_VERSION}/reg", json=data, proxies=proxy)
+    # Send the request. Retry when Cloudflare rate-limits temporary bursts.
+    response = None
+    for attempt in range(REGISTER_MAX_RETRIES + 1):
+        try:
+            response = SESSION.post(
+                f"{API_URL}/{API_VERSION}/reg",
+                json=data,
+                proxies=proxy,
+                timeout=REQUEST_TIMEOUT
+            )
+            if response.status_code not in (429, 500, 502, 503, 504):
+                break
+        except RequestException:
+            if attempt >= REGISTER_MAX_RETRIES:
+                raise
+        if attempt < REGISTER_MAX_RETRIES:
+            time.sleep(REGISTER_RETRY_SLEEP * (attempt + 1))
+
     response.raise_for_status()
 
     return genAccountFromResponse(response.json(), referrer=referrer, private_key=private_key)
@@ -124,7 +155,8 @@ def getAccount(account: Account, proxy=None) -> dict:
 
     response = SESSION.get(f"{API_URL}/{API_VERSION}/reg/{account.account_id}",
                            headers={"Authorization": f"Bearer {account.token}"},
-                           proxies=proxy)
+                           proxies=proxy,
+                           timeout=REQUEST_TIMEOUT)
     response.raise_for_status()
     data = response.json()
     data = data["result"]
@@ -157,7 +189,8 @@ def updateLicenseKey(account: Account, license_key: str, proxy=None, logger=None
 
     response = SESSION.put(f"{API_URL}/{API_VERSION}/reg/{account.account_id}/account",
                            headers={"Authorization": f"Bearer {account.token}"},
-                           json=data, proxies=proxy)
+                           json=data, proxies=proxy,
+                           timeout=REQUEST_TIMEOUT)
 
     if response.status_code >= 400:
         if logger:
@@ -183,7 +216,8 @@ def updatePublicKey(account: Account, public_key: str, proxy=None) -> dict:
 
     response = SESSION.put(f"{API_URL}/{API_VERSION}/reg/{account.account_id}",
                            headers={"Authorization": f"Bearer {account.token}"},
-                           json=data, proxies=proxy)
+                           json=data, proxies=proxy,
+                           timeout=REQUEST_TIMEOUT)
     response.raise_for_status()
 
     return response.json()["result"]
@@ -198,7 +232,8 @@ def getClientConfig(proxy=None) -> dict:
     """
 
     response = SESSION.get(f"{API_URL}/{API_VERSION}/client_config",
-                           proxies=proxy)
+                           proxies=proxy,
+                           timeout=REQUEST_TIMEOUT)
     response.raise_for_status()
 
     return response.json()["result"]
