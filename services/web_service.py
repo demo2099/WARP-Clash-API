@@ -68,12 +68,16 @@ def rateLimit(limit: int = REQUEST_RATE_LIMIT):
     def decorator(f):
         @wraps(f)
         def decoratedFunction(*args, **kwargs):
+            # limit <= 0 means rate limiting is disabled.
+            if limit <= 0:
+                return f(*args, **kwargs)
 
             remote_addr = request.headers.get('X-Forwarded-For') or request.remote_addr
 
             try:
                 if remote_addr not in RATE_LIMIT_MAP:
                     RATE_LIMIT_MAP[remote_addr] = time.time()
+                    return f(*args, **kwargs)
 
                 if RATE_LIMIT_MAP[remote_addr] + limit > time.time():
                     return {
