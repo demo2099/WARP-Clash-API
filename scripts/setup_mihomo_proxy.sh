@@ -17,12 +17,17 @@ services:
       PROXY_PASS: "${PROXY_PASS}"
       PROXY_PORT: "${PROXY_PORT}"
       WARP_ENDPOINT: "${WARP_ENDPOINT}"
-    ports:
-      - "${PROXY_PORT}:${PROXY_PORT}"
 EOF
 
 echo "Written: ${TARGET_DIR}/docker-compose.override.yml"
 cat "${TARGET_DIR}/docker-compose.override.yml"
+
+# Avoid duplicate port mappings from base compose + override.
+# Base file maps to localhost by default; expose publicly for remote clients.
+if [[ -f "${TARGET_DIR}/docker-compose.yaml" ]]; then
+  sed -i "s#127.0.0.1:\\\${PROXY_PORT:-7890}:\\\${PROXY_PORT:-7890}#\\\${PROXY_PORT:-7890}:\\\${PROXY_PORT:-7890}#g" \
+    "${TARGET_DIR}/docker-compose.yaml"
+fi
 
 docker compose -f "${TARGET_DIR}/docker-compose.yaml" -f "${TARGET_DIR}/docker-compose.override.yml" up -d --force-recreate
 docker compose -f "${TARGET_DIR}/docker-compose.yaml" -f "${TARGET_DIR}/docker-compose.override.yml" logs --tail=80
