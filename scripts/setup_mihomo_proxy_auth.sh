@@ -9,7 +9,15 @@ mkdir -p "${TARGET_DIR}"
 
 gen_alnum() {
   local len="$1"
-  tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "${len}"
+  python3 - "$len" <<'PY'
+import secrets
+import string
+import sys
+
+length = int(sys.argv[1])
+alphabet = string.ascii_letters + string.digits
+print(''.join(secrets.choice(alphabet) for _ in range(length)))
+PY
 }
 
 PROXY_USER="${PROXY_USER:-$(gen_alnum 16)}"
