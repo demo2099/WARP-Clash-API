@@ -29,5 +29,26 @@ if [[ -f "${TARGET_DIR}/docker-compose.yaml" ]]; then
     "${TARGET_DIR}/docker-compose.yaml"
 fi
 
-docker compose -f "${TARGET_DIR}/docker-compose.yaml" -f "${TARGET_DIR}/docker-compose.override.yml" up -d --force-recreate
-docker compose -f "${TARGET_DIR}/docker-compose.yaml" -f "${TARGET_DIR}/docker-compose.override.yml" logs --tail=80
+compose_args=(
+  --project-directory "${TARGET_DIR}"
+  -f "${TARGET_DIR}/docker-compose.yaml"
+  -f "${TARGET_DIR}/docker-compose.override.yml"
+)
+
+if [[ -f "${TARGET_DIR}/.env" ]]; then
+  compose_args=(--env-file "${TARGET_DIR}/.env" "${compose_args[@]}")
+fi
+
+# Export runtime vars explicitly so base file interpolation cannot override
+# the values from override with empty shell variables.
+PROXY_USER="${PROXY_USER}" \
+PROXY_PASS="${PROXY_PASS}" \
+PROXY_PORT="${PROXY_PORT}" \
+WARP_ENDPOINT="${WARP_ENDPOINT}" \
+docker compose "${compose_args[@]}" up -d --force-recreate
+
+PROXY_USER="${PROXY_USER}" \
+PROXY_PASS="${PROXY_PASS}" \
+PROXY_PORT="${PROXY_PORT}" \
+WARP_ENDPOINT="${WARP_ENDPOINT}" \
+docker compose "${compose_args[@]}" logs --tail=80
